@@ -1,10 +1,8 @@
 export interface networkConfigItem {
     name?: string;
     subscriptionId?: string;
-    keepersUpdateInterval?: string;
-    raffleEntranceFee?: string;
     callbackGasLimit?: string;
-    vrfCoordinatorV2?: string;
+    vrfCoordinatorV2_5?: string;
     gasLane?: string;
     ethUsdPriceFeed?: string;
     mintFee?: string;
@@ -27,11 +25,12 @@ export const networkConfig: networkConfigInfo = {
     11155111: {
         name: "sepolia",
         ethUsdPriceFeed: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
-        vrfCoordinatorV2: "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
+        vrfCoordinatorV2_5: "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
         gasLane: "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae",
-        callbackGasLimit: "500000", // 500,000 gas
+        callbackGasLimit: "2500000", // 500,000 gas
         mintFee: "10000000000000000", // 0.01 ETH
-        subscriptionId: "4529", // add your ID here!
+        subscriptionId:
+            "57458313366285643664447462583623105256718767822971408006239186772063943734529", // add your ID here!
     },
 };
 

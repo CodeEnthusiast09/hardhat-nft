@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
-import "@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol";
+// import "@openzeppelin/contracts/access/Ownable.sol";
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import "hardhat/console.sol";
 
 /// @notice Thrown when attempting to initialize the contract twice
@@ -23,7 +23,7 @@ error RangeOutOfBounds();
  * @dev Implements ERC721URIStorage for NFT functionality and VRFConsumerBaseV2 for randomness
  * The contract uses Chainlink VRF to ensure provably fair randomness in determining NFT rarity
  */
-contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
+contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2Plus {
     /**
      * @notice Enum representing the three dog breeds with different rarity levels
      * @dev PUG (10% chance), SHIBA_INU (30% chance), ST_BERNARD (60% chance)
@@ -34,13 +34,10 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
         ST_BERNARD
     }
 
-    /* Chainlink VRF Variables */
-
-    /// @notice Interface for interacting with Chainlink VRF Coordinator
-    VRFCoordinatorV2Interface private immutable i_vrfCoordinator;
+    /* ========== Chainlink VRF Variables ========== */
 
     /// @notice Chainlink VRF subscription ID for funding requests
-    uint64 private immutable i_subscriptionId;
+    uint256 private immutable i_subscriptionId;
 
     /// @notice The gas lane (key hash) to use for VRF requests
     bytes32 private immutable i_gasLane;
@@ -54,7 +51,7 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
     /// @notice Number of random words to request from VRF (we only need 1)
     uint32 private constant NUM_WORDS = 1;
 
-    /* NFT Variables */
+    /* ========== NFT Variables ========== */
 
     /// @notice The fee required to mint an NFT
     uint256 private i_mintFee;
@@ -79,7 +76,7 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
     /// @notice Mapping from VRF request ID to the address that made the request
     mapping(uint256 => address) private s_requestIdToSender;
 
-    /* Events */
+    /* ========== EVENTS ========== */
 
     /**
      * @notice Emitted when a user requests to mint an NFT
@@ -95,9 +92,10 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
      */
     event NftMinted(Breed breed, address minter);
 
+    /* ========== CONSTRUCTOR ========== */
+
     /**
      * @notice Constructs the RandomIpfsNft contract
-     * @param vrfCoordinatorV2 Address of the Chainlink VRF Coordinator
      * @param subscriptionId Chainlink VRF subscription ID
      * @param gasLane The gas lane (key hash) for VRF requests
      * @param mintFee The fee in wei required to mint an NFT
@@ -105,14 +103,14 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
      * @param dogTokenUris Array of 3 IPFS URIs for the dog breeds
      */
     constructor(
-        address vrfCoordinatorV2,
-        uint64 subscriptionId,
+        address vrfCoordinator,
+        uint256 subscriptionId,
         bytes32 gasLane,
         uint256 mintFee,
         uint32 callbackGasLimit,
         string[3] memory dogTokenUris
-    ) VRFConsumerBaseV2(vrfCoordinatorV2) ERC721("Random IPFS NFT", "RIN") Ownable(msg.sender) {
-        i_vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) ERC721("Random IPFS NFT", "RIN") {
+        // Removed Ownable(msg.sender) from constructor - VRFConsumerBaseV2Plus handles ownership automatically
         i_gasLane = gasLane;
         i_subscriptionId = subscriptionId;
         i_mintFee = mintFee;
@@ -130,12 +128,17 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
         if (msg.value < i_mintFee) {
             revert NeedMoreETHSent();
         }
-        requestId = i_vrfCoordinator.requestRandomWords(
-            i_gasLane,
-            i_subscriptionId,
-            REQUEST_CONFIRMATIONS,
-            i_callbackGasLimit,
-            NUM_WORDS
+        requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: i_gasLane,
+                subId: i_subscriptionId,
+                requestConfirmations: REQUEST_CONFIRMATIONS,
+                callbackGasLimit: i_callbackGasLimit,
+                numWords: NUM_WORDS,
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
         );
 
         s_requestIdToSender[requestId] = msg.sender;
@@ -148,7 +151,10 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
      * @param requestId The VRF request ID
      * @param randomWords Array of random numbers from Chainlink VRF
      */
-    function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
+    function fulfillRandomWords(
+        uint256 requestId,
+        uint256[] calldata randomWords
+    ) internal override {
         address dogOwner = s_requestIdToSender[requestId];
 
         uint256 newItemId = s_tokenCounter;
@@ -261,16 +267,9 @@ contract RandomIpfsNft is ERC721URIStorage, VRFConsumerBaseV2, Ownable {
     }
 
     /**
-     * @notice Returns the VRF Address
-     */
-    function getVrfCoordinator() public view returns (VRFCoordinatorV2Interface) {
-        return i_vrfCoordinator;
-    }
-
-    /**
      * @notice Returns the subscription ID
      */
-    function getSubscriptionId() public view returns (uint64) {
+    function getSubscriptionId() public view returns (uint256) {
         return i_subscriptionId;
     }
 }

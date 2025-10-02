@@ -1,6 +1,6 @@
 import hre from "hardhat";
 import { network } from "hardhat";
-import MockModule from "../ignition/modules/mock";
+import MocksModule from "../ignition/modules/mock";
 import RandomIpfsNftModule from "../ignition/modules/random-ipfs-nft";
 import {
     networkConfig,
@@ -15,7 +15,7 @@ const FUND_AMOUNT = "1000000000000000000000";
 
 const imagesLocation = "./images/random-nft/";
 
-let tokenUris: string[] = [
+let tokenUris = [
     "ipfs://bafkreidwgbvd4cph5vjmyfjjkmgnom7nz7b6ues5cmtovclcks7dfsfiai",
     "ipfs://bafkreibdusqeb5o34gkadkroavftgjfekiuju77yaadaykacmh3q2xtx7u",
     "ipfs://bafkreib7vnqdrfs3pzz64w5vale65vkeubygpibpxh5ni7zeekb2kfg6xy",
@@ -34,7 +34,7 @@ const metadataTemplate = {
 };
 
 async function main() {
-    let vrfCoordinatorV2Address: string | undefined, subscriptionId: string | undefined;
+    let vrfCoordinatorV2_5Address: string | undefined, subscriptionId: string | bigint | undefined;
 
     if (process.env.UPLOAD_TO_PINATA == "true") {
         tokenUris = await handleTokenUris();
@@ -43,11 +43,11 @@ async function main() {
     if (developmentChains.includes(hre.network.name)) {
         console.log("Local network detected, deploying mocks...");
 
-        const mockResult = await hre.ignition.deploy(MockModule);
+        const mockResult = await hre.ignition.deploy(MocksModule);
 
-        const mock = mockResult.vrfCoordinatorV2Mock;
+        const mock = mockResult.vrfCoordinatorV2_5Mock;
 
-        vrfCoordinatorV2Address = await mock.getAddress();
+        vrfCoordinatorV2_5Address = await mock.getAddress();
 
         const transactionResponse = await mock.createSubscription();
 
@@ -73,7 +73,7 @@ async function main() {
 
         await mock.fundSubscription(subscriptionId, FUND_AMOUNT);
     } else {
-        vrfCoordinatorV2Address = networkConfig[network.config.chainId!]["vrfCoordinatorV2"];
+        vrfCoordinatorV2_5Address = networkConfig[network.config.chainId!]["vrfCoordinatorV2_5"];
 
         subscriptionId = networkConfig[network.config.chainId!]["subscriptionId"];
     }
@@ -91,7 +91,7 @@ async function main() {
     const randomNftDeployment = await hre.ignition.deploy(RandomIpfsNftModule, {
         parameters: {
             RandomIpfsNftModule: {
-                vrfCoordinatorV2Address: vrfCoordinatorV2Address!,
+                vrfCoordinatorV2_5Address: vrfCoordinatorV2_5Address!,
                 subscriptionId: subscriptionId!,
                 gasLane: cfg.gasLane,
                 mintFee: cfg.mintFee,
@@ -127,7 +127,11 @@ async function main() {
     }
 
     if (!developmentChains.includes(hre.network.name) && process.env.ETHERSCAN_API_KEY) {
-        await verify(randomIpfsNftAddress, [vrfCoordinatorV2Address, subscriptionId, ...otherArgs]);
+        await verify(randomIpfsNftAddress, [
+            vrfCoordinatorV2_5Address,
+            subscriptionId,
+            ...otherArgs,
+        ]);
     }
 }
 
